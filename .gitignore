@@ -1,0 +1,5 @@
+# compilação Java
+codigo_java/out/
+*.class
+# ficheiros temporários do Office
+~$*
