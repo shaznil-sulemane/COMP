@@ -1,30 +1,37 @@
 package AutomatoFinito;
 
-import java.util.List;
+// Um token: tipo (LET, ID, ...), texto original e posição.
+// Cada tipo tem um SÍMBOLO de uma letra, para os autómatos de pilha:
+//   let id = λx.x in id y   ->   li=λi.inii#
+public class Token {
+	String tipo;
+	String lexema;
+	int linha;
+	int coluna;
+	char simbolo;
 
-/** Unidade lexical: tipo, lexema e posição (linha:coluna, a contar de 1). */
-public record Token(TokenType tipo, String lexema, int linha, int coluna) {
+	public Token(String tipo, String lexema, int linha, int coluna) {
+		this.tipo = tipo;
+		this.lexema = lexema;
+		this.linha = linha;
+		this.coluna = coluna;
+		this.simbolo = simboloDe(tipo);
+	}
 
-	public String pos() { return linha + ":" + coluna; }
+	static char simboloDe(String tipo) {
+		if (tipo.equals("LET"))    return 'l';
+		if (tipo.equals("IN"))     return 'n';
+		if (tipo.equals("ID"))     return 'i';
+		if (tipo.equals("LAMBDA")) return 'λ';
+		if (tipo.equals("DOT"))    return '.';
+		if (tipo.equals("LPAREN")) return '(';
+		if (tipo.equals("RPAREN")) return ')';
+		if (tipo.equals("EQUALS")) return '=';
+		return '#'; // EOF
+	}
 
-	@Override
 	public String toString() {
-		return switch (tipo) {
-			case ID -> "ID(" + lexema + ")";
-			default -> tipo.name();
-		};
-	}
-
-	/** Converte a lista de tokens na palavra lida pelos autómatos de pilha. */
-	public static String palavra(List<Token> tokens) {
-		StringBuilder sb = new StringBuilder();
-		for (Token t : tokens) sb.append(t.tipo().simbolo);
-		return sb.toString();
-	}
-
-	public static String lista(List<Token> tokens) {
-		StringBuilder sb = new StringBuilder();
-		for (Token t : tokens) sb.append(t).append(' ');
-		return sb.toString().trim();
+		if (tipo.equals("ID")) return "ID(" + lexema + ")";
+		return tipo;
 	}
 }

@@ -1,114 +1,82 @@
 package AutomatoFinito;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.Stack;
 
-/**
- * Analisador semântico (alínea E): escopo e ligações.
- *
- *   check(e, Γ):
- *     Var(x):        se lookup(Γ, x) = ∅ → erro(x, pos)
- *     Lambda(x, b):  check(b, Γ + { x : PARAM })
- *     Apply(f, a):   check(f, Γ);  check(a, Γ)
- *     Let(x, v, b):  check(v, Γ)              // não recursivo
- *                    check(b, Γ + { x : LET })
- *
- * Política: acumular todos os erros; o programa só é aceite se for fechado
- * (FV(e) = ∅). Sombreamento gera apenas um aviso.
- */
+// Análise semântica com uma PILHA DE NOMES (o ambiente).
+// Percorre os tokens da esquerda para a direita:
+//
+//   λ x        -> push x                 (x visível até o corpo acabar)
+//   let x =    -> push "let x"            (marcador: x ainda NÃO visível)
+//   in         -> pop até "let x", push x (o valor acabou; x fica visível)
+//   (          -> push "("                (marcador)
+//   )          -> pop até "("             (tudo o que abriu lá dentro acaba)
+//   nome       -> procurar na pilha, do topo para baixo; se não está: ERRO
+//
+// Só corre depois de o AP da sintaxe aceitar a expressão.
 public class AnalisadorSemantico {
+	ArrayList<String> erros = new ArrayList<String>();
+	ArrayList<String> avisos = new ArrayList<String>();
+	boolean mostrarPassos = false;
 
-    public record Passo(String no, String accao, String ambiente) {}
+	public boolean verificar(ArrayList<Token> tokens) {
+		Stack<String> pilha = new Stack<String>();
 
-    private final TabelaSimbolos tabela = new TabelaSimbolos();
-    private final List<CompilerError> erros = new ArrayList<>();
-    private final List<String> avisos = new ArrayList<>();
-    private final List<Passo> passos = new ArrayList<>();
-    private final Set<String> ligadas = new LinkedHashSet<>();
+		for (int k = 0; k < tokens.size(); k++) {
+			Token t = tokens.get(k);
+			String accao = "";
 
-    /** Analisa a AST e devolve true se for semanticamente válida. */
-    public boolean analisar(Ast.Expr raiz) {
-        tabela.enterScope();          // escopo global (vazio)
-        check(raiz);
-        tabela.exitScope();
-        return erros.isEmpty();
-    }
+			if (t.tipo.equals("LAMBDA")) {
+				String x = tokens.get(k + 1).lexema;
+				if (procurar(pilha, x)) avisos.add("Aviso: '" + x + "' oculta outro '" + x + "' (sombreamento)");
+				pilha.push(x);
+				accao = "push " + x;
+				k++;                                   // o parâmetro já foi tratado
+			} else if (t.tipo.equals("LET")) {
+				String x = tokens.get(k + 1).lexema;
+				pilha.push("let " + x);
+				accao = "push marcador 'let " + x + "'";
+				k++;
+			} else if (t.tipo.equals("IN")) {
+				String x = popAte(pilha, "let ").substring(4);
+				if (procurar(pilha, x)) avisos.add("Aviso: '" + x + "' oculta outro '" + x + "' (sombreamento)");
+				pilha.push(x);
+				accao = "pop até 'let', push " + x;
+			} else if (t.tipo.equals("LPAREN")) {
+				pilha.push("(");
+				accao = "push (";
+			} else if (t.tipo.equals("RPAREN")) {
+				popAte(pilha, "(");
+				accao = "pop até (";
+			} else if (t.tipo.equals("ID")) {
+				if (procurar(pilha, t.lexema)) {
+					accao = "procura " + t.lexema + " -> encontrada";
+				} else {
+					accao = "procura " + t.lexema + " -> ERRO";
+					erros.add("Erro semântico [" + t.linha + ":" + t.coluna + "]: variável '" + t.lexema + "' não ligada");
+				}
+			}
+			if (mostrarPassos && !accao.isEmpty()) {
+				System.out.println(String.format("   %-8s %-32s %s", t.lexema, accao, pilha));
+			}
+		}
+		return erros.isEmpty();
+	}
 
-    private void check(Ast.Expr e) {
-        switch (e) {
-            case Ast.Var v -> {
-                boolean ok = tabela.lookup(v.nome()) != null;
-                passos.add(new Passo("Var(" + v.nome() + ")",
-                        ok ? "lookup ✔" : "lookup ✘ → erro", tabela.toString()));
-                if (!ok) erros.add(new CompilerError(CompilerError.Fase.SEMANTICO,
-                        v.linha(), v.coluna(), "variável '" + v.nome() + "' não ligada"));
-            }
-            case Ast.Lambda l -> {
-                avisarSombreamento(l.param(), l.linha(), l.coluna());
-                tabela.enterScope();
-                tabela.declare(l.param(), TabelaSimbolos.Tipo.PARAM, l.linha(), l.coluna());
-                ligadas.add(l.param());
-                passos.add(new Passo("Lambda(" + l.param() + ")",
-                        "enter + declare " + l.param(), tabela.toString()));
-                check(l.corpo());
-                tabela.exitScope();
-                passos.add(new Passo("Lambda(" + l.param() + ")", "exit", tabela.toString()));
-            }
-            case Ast.Apply a -> {
-                check(a.funcao());
-                check(a.argumento());
-            }
-            case Ast.Let l -> {
-                passos.add(new Passo("Let(" + l.nome() + ")", "visitar o valor", tabela.toString()));
-                check(l.valor());                         // x NÃO é visível no valor
-                avisarSombreamento(l.nome(), l.linha(), l.coluna());
-                tabela.enterScope();
-                tabela.declare(l.nome(), TabelaSimbolos.Tipo.LET, l.linha(), l.coluna());
-                ligadas.add(l.nome());
-                passos.add(new Passo("Let(" + l.nome() + ")",
-                        "enter + declare " + l.nome(), tabela.toString()));
-                check(l.corpo());
-                tabela.exitScope();
-                passos.add(new Passo("Let(" + l.nome() + ")", "exit", tabela.toString()));
-            }
-            case Ast.Erro x -> { /* já reportado na fase sintáctica */ }
-        }
-    }
+	// procura um nome do topo para a base (ignora marcadores)
+	static boolean procurar(Stack<String> pilha, String nome) {
+		for (int k = pilha.size() - 1; k >= 0; k--) {
+			if (pilha.get(k).equals(nome)) return true;
+		}
+		return false;
+	}
 
-    private void avisarSombreamento(String nome, int linha, int coluna) {
-        TabelaSimbolos.Simbolo anterior = tabela.lookup(nome);
-        if (anterior != null) {
-            avisos.add("Aviso [" + linha + ":" + coluna + "]: '" + nome + "' oculta a declaração em "
-                    + anterior.linha() + ":" + anterior.coluna() + " (sombreamento)");
-        }
-    }
-
-    /**
-     * Conjunto de variáveis livres FV(e):
-     *   FV(x) = {x}                     FV(λx.e) = FV(e) \ {x}
-     *   FV(e1 e2) = FV(e1) ∪ FV(e2)     FV(let x = e1 in e2) = FV(e1) ∪ (FV(e2) \ {x})
-     */
-    public static Set<String> livres(Ast.Expr e) {
-        Set<String> r = new LinkedHashSet<>();
-        switch (e) {
-            case Ast.Var v -> r.add(v.nome());
-            case Ast.Lambda l -> { r.addAll(livres(l.corpo())); r.remove(l.param()); }
-            case Ast.Apply a -> { r.addAll(livres(a.funcao())); r.addAll(livres(a.argumento())); }
-            case Ast.Let l -> {
-                Set<String> corpo = livres(l.corpo());
-                corpo.remove(l.nome());
-                r.addAll(livres(l.valor()));
-                r.addAll(corpo);
-            }
-            case Ast.Erro x -> { }
-        }
-        return r;
-    }
-
-    public List<CompilerError> erros() { return erros; }
-    public List<String> avisos()       { return avisos; }
-    public List<Passo> passos()        { return passos; }
-    public Set<String> ligadas()       { return ligadas; }
+	// desempilha até encontrar um marcador que começa por 'prefixo'; devolve-o
+	static String popAte(Stack<String> pilha, String prefixo) {
+		while (!pilha.isEmpty()) {
+			String s = pilha.pop();
+			if (s.startsWith(prefixo)) return s;
+		}
+		return "";
+	}
 }

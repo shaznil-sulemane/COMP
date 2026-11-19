@@ -1,60 +1,59 @@
 package AutomatoFinito;
 
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
-/**
- * Analisador léxico: usa o AFD construído com Estado/Transicao e aplica-o
- * repetidamente com maior correspondência (Automato.maiorPrefixo).
- * Depois de qID, o passo qRES classifica palavras reservadas.
- */
+// Corta o texto em tokens usando o AFD léxico.
 public class AnalisadorLexico {
+	Automato afd = Automatos.criarAFDLexico();
+	ArrayList<String> erros = new ArrayList<String>();
 
-	/** qRES — tabela de palavras reservadas. */
-	static final Map<String, TokenType> RESERVADAS = Map.of(
-		"lambda", TokenType.LAMBDA,
-		"let",    TokenType.LET,
-		"in",     TokenType.IN
-	);
+	public ArrayList<Token> tokenizar(String texto) {
+		ArrayList<Token> tokens = new ArrayList<Token>();
+		int i = 0;
+		int linha = 1, coluna = 1;
 
-	private final Automato afd = AutomatosLinguagem.criarAFDLexico();
-	private final List<CompilerError> erros = new ArrayList<>();
-	private final List<String> caminhos = new ArrayList<>();
+		while (i < texto.length()) {
+			int fim = afd.maiorPrefixo(texto, i);   // maior pedaço que o AFD aceita
 
-	public List<Token> tokenizar(String fonte) {
-		List<Token> tokens = new ArrayList<>();
-		int pos = 0, linha = 1, coluna = 1;
-
-		while (pos < fonte.length()) {
-			int fim = afd.maiorPrefixo(fonte, pos);
-
-			if (fim == -1) {                            // nenhum prefixo aceite
-				erros.add(new CompilerError(CompilerError.Fase.LEXICO, linha, coluna,
-						"carácter '" + fonte.charAt(pos) + "' não reconhecido"));
-				fim = pos + 1;                          // recuperação: salta 1 carácter
+			if (fim == -1) {                         // nenhum: carácter inválido
+				erros.add("Erro léxico [" + linha + ":" + coluna + "]: carácter '" + texto.charAt(i) + "' não reconhecido");
+				fim = i + 1;                         // salta-o e continua
 			} else {
-				String lexema = fonte.substring(pos, fim);
-				Estado aceite = afd.getUltimoAceite();
-				TokenType tipo = aceite.token;
-				if (tipo == TokenType.ID) {             // qRES: classificação
-					tipo = RESERVADAS.getOrDefault(lexema, TokenType.ID);
+				String lexema = texto.substring(i, fim);
+				String tipo = afd.ultimoEstado.nome; // o estado final diz o tipo
+				if (tipo.equals("ID")) {
+					tipo = palavraReservada(lexema);  // lambda, let, in
 				}
-				if (tipo != null) {                     // null = espaço: ignorar
-					Token t = new Token(tipo, lexema, linha, coluna);
-					tokens.add(t);
-					caminhos.add(String.format("%-30s ⇒ %s", afd.getCaminho(), t));
+				if (!tipo.equals("ESPACO")) {         // espaços não viram token
+					tokens.add(new Token(tipo, lexema, linha, coluna));
 				}
 			}
-			for (int k = pos; k < fim; k++) {           // actualizar linha:coluna
-				if (fonte.charAt(k) == '\n') { linha++; coluna = 1; } else { coluna++; }
+
+			// avançar a posição (linha:coluna)
+			for (int k = i; k < fim; k++) {
+				if (texto.charAt(k) == '\n') { linha++; coluna = 1; }
+				else coluna++;
 			}
-			pos = fim;
+			i = fim;
 		}
-		tokens.add(new Token(TokenType.EOF, "", linha, coluna));
+		tokens.add(new Token("EOF", "", linha, coluna));
 		return tokens;
 	}
 
-	public List<CompilerError> getErros() { return erros; }
-	public List<String> getCaminhos()     { return caminhos; }
+	// depois de ler um nome inteiro, ver se é palavra reservada
+	static String palavraReservada(String lexema) {
+		if (lexema.equals("lambda")) return "LAMBDA";
+		if (lexema.equals("let"))    return "LET";
+		if (lexema.equals("in"))     return "IN";
+		return "ID";
+	}
+
+	// os tokens em forma de palavra para os autómatos de pilha
+	static String palavra(ArrayList<Token> tokens) {
+		String p = "";
+		for (int k = 0; k < tokens.size(); k++) {
+			p = p + tokens.get(k).simbolo;
+		}
+		return p;
+	}
 }

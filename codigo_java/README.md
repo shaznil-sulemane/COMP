@@ -1,33 +1,29 @@
-# Mini Linguagem Funcional — código Java (Tema 10, até à análise semântica)
+# Mini Linguagem Funcional — código Java
 
-Estrutura baseada nas classes da aula (`Estado`, `Transicao`, `Automato`, `Executavel`).
-Os três autómatos da linguagem são construídos da mesma forma que o exemplo da aula:
-criar estados → ligar transições → criar o autómato → `procurarPalavra(...)`.
+Baseado nas classes da aula: `Estado`, `Transicao`, `Automato`, `Executavel`.
+Tudo é feito com **autómatos e pilhas**:
 
-Requer Java 21.
+```
+texto ──AFD──▶ tokens ──AP──▶ sintaxe OK ──pilha de nomes──▶ variáveis OK
+```
+
+| Ficheiro | O que faz |
+|---|---|
+| `Estado.java`, `Transicao.java`, `Automato.java` | Classes da aula. `Transicao` está igual; `Estado` ganhou um `nome`; `Automato` ganhou `maiorPrefixo()` |
+| `TransicaoPilha.java` | `Transicao` + topo da pilha + o que empilhar |
+| `AutomatoPilha.java` | O mesmo ciclo de `procurarPalavra()`, agora com uma `Stack` |
+| `Automatos.java` | Constrói os 3 autómatos: **AFD léxico**, **AP de parênteses**, **AP da sintaxe** |
+| `Token.java`, `AnalisadorLexico.java` | Usa o AFD para cortar o texto em tokens |
+| `AnalisadorSemantico.java` | Pilha de nomes: verifica se cada variável foi declarada |
+| `Executavel.java` | Exemplo da aula + demonstração passo a passo de tudo |
+| `Testes.java` | 31 testes |
+
+## Executar
 
 ```
 cd codigo_java
 javac -encoding UTF-8 -d out src/AutomatoFinito/*.java
-java -cp out AutomatoFinito.Testes             # 40 testes automáticos
-java -cp out AutomatoFinito.Executavel         # exemplo da aula + todos os autómatos e fases
-java -cp out AutomatoFinito.Executavel "\x.x y"
+java -cp out AutomatoFinito.Executavel
+java -cp out AutomatoFinito.Testes
+java -cp out AutomatoFinito.Executavel "\x.x y"     (no Windows use \ em vez de λ)
 ```
-
-> No terminal do Windows use `\` em vez de `λ` nos argumentos (o AFD aceita os dois).
-
-## Classes
-
-| Classe | Origem | Papel |
-|---|---|---|
-| `Estado`, `Transicao`, `Automato` | aula (mantidas) | AFD genérico. Acrescentos: nome/token no `Estado`, `maiorPrefixo()` no `Automato` |
-| `TransicaoPilha` | estende `Transicao` | δ(estado, símbolo, topo) = (destino, empilhar) |
-| `AutomatoPilha` | mesma lógica do `Automato` | `procurarPalavra()` com pilha e traço de execução |
-| `AutomatosLinguagem` | novo | Constrói o **AFD léxico**, o **AP de parênteses** e o **AP LL(1)** |
-| `AnalisadorLexico` | novo | Aplica o AFD com maior correspondência + qRES (palavras reservadas) |
-| `Token`, `TokenType` | novo | Cada token tem um símbolo: `let id = λx.x in id y` → `li=λi.inii#` |
-| `Parser`, `Ast` | novo | Descendente recursivo, AST, modo de pânico |
-| `TabelaSimbolos`, `AnalisadorSemantico` | novo | Pilha de escopos, FV(e), variáveis não ligadas |
-| `Executavel`, `Testes` | aula / novo | Demonstração e testes |
-
-A versão anterior do código e dos slides está guardada em `../_backup_v1/`.

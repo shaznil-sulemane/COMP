@@ -1,34 +1,19 @@
 package AutomatoFinito;
 
-/**
- * Transição de autómato de pilha — estende a Transicao da aula.
- *
- *   δ(estado, simbolo, topo) = (proximoEstado, empilhar)
- *
- * Ao disparar: desempilha 'topo' e empilha a cadeia 'empilhar'
- * (o 1.º carácter fica no topo). Se 'consome' for falso, o símbolo de
- * entrada é apenas consultado (antevisão), não consumido.
- */
+// Transição de autómato de pilha = Transicao da aula + 3 campos.
+//
+//   lê 'simbolo', com 'topo' no topo da pilha
+//   -> tira o topo, põe 'empilhar' no seu lugar, vai para 'proximoEstado'
+//
 public class TransicaoPilha extends Transicao {
-	char topo;
-	String empilhar;
-	boolean consome;
+	char topo;        // o que tem de estar no topo da pilha
+	String empilhar;  // o que entra no lugar do topo ("" = só desempilhar)
+	boolean consome;  // true = avança para o próximo símbolo; false = só espreita
 
 	public TransicaoPilha(char simbolo, char topo, String empilhar, Estado proxEstado, boolean consome) {
 		super(simbolo, proxEstado);
 		this.topo = topo;
 		this.empilhar = empilhar;
 		this.consome = consome;
-	}
-
-	/** Descrição curta para o traço de execução. */
-	public String descricao() {
-		String alfa = empilhar.isEmpty() ? "ε" : empilhar;
-		if (simbolo == '#' && consome) return "aceitar (EOF)";              // fim com a base no topo
-		if (!consome) return topo + " → " + alfa;                         // expansão
-		if (empilhar.isEmpty() && simbolo == topo) return "match " + simbolo;
-		if (empilhar.isEmpty()) return "pop " + topo;
-		if (empilhar.length() > 1) return "push " + empilhar.charAt(0);
-		return "sem alteração";
 	}
 }
